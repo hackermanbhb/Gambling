@@ -1,130 +1,257 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="midnight" data-mode="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Casino Session Tracker</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Casino Session Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js" defer></script>
 </head>
+
 <body>
-    <div class="container">
-        <header>
-            <h1>Casino Session Tracker</h1>
-            <p class="subtitle">Track your performance like a pro trader</p>
-        </header>
-
-        <!-- Summary Cards -->
-        <div class="summary-grid">
-            <div class="card">
-                <div class="card-label">Total Buy-in</div>
-                <div class="card-value" id="totalBuyIn">$0.00</div>
-            </div>
-            <div class="card">
-                <div class="card-label">Total Cash-out</div>
-                <div class="card-value" id="totalCashOut">$0.00</div>
-            </div>
-            <div class="card">
-                <div class="card-label">Net Profit/Loss</div>
-                <div class="card-value" id="netProfitLoss">$0.00</div>
-            </div>
-            <div class="card">
-                <div class="card-label">Win Rate</div>
-                <div class="card-value" id="winRate">0%</div>
-            </div>
-        </div>
-
-        <!-- Chart Section -->
-        <div class="chart-container">
-            <h2>Cumulative Performance</h2>
-            <canvas id="performanceChart"></canvas>
-        </div>
-
-        <!-- Data Entry Form -->
-        <div class="form-section">
-            <h2>Add New Session</h2>
-            <form id="sessionForm">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="sessionDate">Date</label>
-                        <input type="date" id="sessionDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="buyIn">Buy-in ($)</label>
-                        <input type="number" id="buyIn" min="0" step="0.01" placeholder="0.00" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="cashOut">Cash-out ($)</label>
-                        <input type="number" id="cashOut" min="0" step="0.01" placeholder="0.00" required>
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">Add Session</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-
-        <!-- Sessions Table -->
-        <div class="table-section">
-            <div class="table-header">
-                <h2>Session History</h2>
-                <div class="table-actions">
-                    <button class="btn btn-secondary" id="exportBtn">Export JSON</button>
-                    <label for="importFile" class="btn btn-secondary">Import JSON</label>
-                    <input type="file" id="importFile" accept=".json" style="display: none;">
-                    <button class="btn btn-danger" id="clearBtn">Clear All</button>
-                </div>
-            </div>
-            <div class="table-wrapper">
-                <table id="sessionsTable">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Buy-in</th>
-                            <th>Cash-out</th>
-                            <th>Profit/Loss</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <tr class="empty-state">
-                            <td colspan="5">No sessions recorded yet. Add your first session above!</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Edit Modal -->
-        <div id="editModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>Edit Session</h2>
-                    <button class="modal-close" onclick="closeEditModal()">&times;</button>
-                </div>
-                <form id="editForm">
-                    <input type="hidden" id="editSessionId">
-                    <div class="form-group">
-                        <label for="editDate">Date</label>
-                        <input type="date" id="editDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editBuyIn">Buy-in ($)</label>
-                        <input type="number" id="editBuyIn" min="0" step="0.01" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editCashOut">Cash-out ($)</label>
-                        <input type="number" id="editCashOut" min="0" step="0.01" required>
-                    </div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save Changes</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">CS</div>
+      <div class="brand-text">
+        <div class="title">Casino Sessions</div>
+        <div class="subtitle">Trading-style P/L tracker</div>
+      </div>
     </div>
 
-    <script src="app.js"></script>
+    <div class="topbar-actions">
+      <div class="theme-wrap">
+        <span class="pill-label">Theme</span>
+        <select id="themeSelect" class="select" aria-label="Select color theme">
+          <option value="midnight">Midnight</option>
+          <option value="graphite">Graphite</option>
+          <option value="neon">Neon</option>
+          <option value="sand">Sand</option>
+        </select>
+      </div>
+
+      <div class="theme-wrap">
+        <span class="pill-label">Mode</span>
+        <button id="modeToggle" class="btn btn-ghost mode-btn" type="button" aria-label="Toggle dark/light mode">
+          <span class="mode-icon">◐</span>
+        </button>
+      </div>
+
+      <button id="exportBtn" class="btn btn-ghost" type="button" aria-label="Export data as JSON">Export JSON</button>
+
+      <label class="btn btn-ghost file-btn" for="importFile">
+        Import JSON
+        <input id="importFile" type="file" accept="application/json" hidden aria-label="Import JSON file" />
+      </label>
+
+      <button id="clearBtn" class="btn btn-danger" type="button" aria-label="Clear all sessions">Clear All</button>
+    </div>
+  </header>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <main class="container">
+    <section class="grid">
+      <!-- Left column -->
+      <div class="col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Add Session</h2>
+            <div class="hint">Only 3 inputs. Profit/Loss is computed.</div>
+          </div>
+
+          <form id="sessionForm" class="form" aria-label="Add new session form">
+            <div class="field">
+              <label for="date">Date</label>
+              <input id="date" name="date" type="date" required aria-required="true" />
+            </div>
+
+            <div class="field">
+              <label for="buyIn">Buy-in</label>
+              <input id="buyIn" name="buyIn" type="number" min="0" step="0.01" placeholder="0.00" required aria-required="true" />
+            </div>
+
+            <div class="field">
+              <label for="cashOut">Cash-out</label>
+              <input id="cashOut" name="cashOut" type="number" min="0" step="0.01" placeholder="0.00" required aria-required="true" />
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Add Session</button>
+              <button id="resetBtn" class="btn btn-ghost" type="button">Reset</button>
+            </div>
+
+            <div id="formError" class="form-error" role="alert" aria-live="assertive"></div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Summary</h2>
+            <div class="hint">Portfolio-style overview</div>
+          </div>
+
+          <div class="cards">
+            <div class="card">
+              <div class="card-label">Total Buy-in</div>
+              <div id="totalBuyIn" class="card-value" aria-label="Total buy-in amount">$0</div>
+            </div>
+
+            <div class="card">
+              <div class="card-label">Total Cash-out</div>
+              <div id="totalCashOut" class="card-value" aria-label="Total cash-out amount">$0</div>
+            </div>
+
+            <div class="card">
+              <div class="card-label">Net Profit/Loss</div>
+              <div id="netPL" class="card-value" aria-label="Net profit or loss">$0</div>
+            </div>
+
+            <div class="card">
+              <div class="card-label">Win Rate</div>
+              <div id="winRate" class="card-value" aria-label="Percentage of winning sessions">0%</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Statistics</h2>
+            <div class="hint">Performance insights</div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div class="stat-label">Biggest Win</div>
+              <div id="biggestWin" class="stat-value good">$0</div>
+            </div>
+
+            <div class="stat-item">
+              <div class="stat-label">Biggest Loss</div>
+              <div id="biggestLoss" class="stat-value bad">$0</div>
+            </div>
+
+            <div class="stat-item">
+              <div class="stat-label">Current Streak</div>
+              <div id="currentStreak" class="stat-value">-</div>
+            </div>
+
+            <div class="stat-item">
+              <div class="stat-label">ROI</div>
+              <div id="roi" class="stat-value">0%</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right column -->
+      <div class="col">
+        <section class="panel">
+          <div class="panel-head row">
+            <div>
+              <h2>Performance Chart</h2>
+              <div class="hint">Line segments and points reflect up/down days</div>
+            </div>
+            <div class="chart-controls">
+              <div class="mini-metrics">
+                <div class="mini">
+                  <div class="mini-label">Sessions</div>
+                  <div id="sessionCount" class="mini-value">0</div>
+                </div>
+                <div class="mini">
+                  <div class="mini-label">Avg P/L</div>
+                  <div id="avgPL" class="mini-value">$0</div>
+                </div>
+              </div>
+              <div class="view-toggle">
+                <button id="cumulativeBtn" class="toggle-btn active" type="button" aria-label="Show cumulative view" aria-pressed="true">Cumulative</button>
+                <button id="dailyBtn" class="toggle-btn" type="button" aria-label="Show daily view" aria-pressed="false">Daily</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-wrap">
+            <canvas id="plChart" role="img" aria-label="Profit and loss chart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head row">
+            <div>
+              <h2>Session History</h2>
+              <div class="hint">Sorted by date (ascending). Edit/Delete inline.</div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table" id="sessionTable">
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col" class="num">Buy-in</th>
+                  <th scope="col" class="num">Cash-out</th>
+                  <th scope="col" class="num">P/L</th>
+                  <th scope="col" class="actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody">
+                <!-- rows injected -->
+              </tbody>
+            </table>
+
+            <div id="emptyState" class="empty">
+              No sessions yet. Add your first one on the left.
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- Edit Modal -->
+  <dialog id="editModal" class="modal" aria-labelledby="modalTitle" aria-describedby="modalDesc">
+    <form id="editForm" class="modal-card" method="dialog">
+      <div class="modal-head">
+        <div>
+          <div id="modalTitle" class="modal-title">Edit Session</div>
+          <div id="modalDesc" class="modal-subtitle">Update date, buy-in, or cash-out.</div>
+        </div>
+        <button class="icon-btn" value="cancel" aria-label="Close dialog" type="submit">✕</button>
+      </div>
+
+      <input type="hidden" id="editId" />
+
+      <div class="modal-grid">
+        <div class="field">
+          <label for="editDate">Date</label>
+          <input id="editDate" type="date" required aria-required="true" />
+        </div>
+
+        <div class="field">
+          <label for="editBuyIn">Buy-in</label>
+          <input id="editBuyIn" type="number" min="0" step="0.01" required aria-required="true" />
+        </div>
+
+        <div class="field">
+          <label for="editCashOut">Cash-out</label>
+          <input id="editCashOut" type="number" min="0" step="0.01" required aria-required="true" />
+        </div>
+      </div>
+
+      <div id="editError" class="form-error" role="alert" aria-live="assertive"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" value="cancel" type="submit">Cancel</button>
+        <button id="saveEditBtn" class="btn btn-primary" value="default" type="button">Save Changes</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer class="footer">
+    <span>Local-only • Stored in your browser (localStorage)</span>
+  </footer>
 </body>
 </html>

@@ -1,419 +1,783 @@
-// Session data stored in localStorage
-let sessions = [];
-let chart = null;
+/* =========================================================
+   Casino Session Dashboard
+   - localStorage persistence
+   - import/export JSON
+   - CRUD (add/edit/delete)
+   - dark/light mode support
+   - Chart.js cumulative/daily P/L with up/down segment coloring
+   - Enhanced statistics (biggest win/loss, streaks, ROI)
+   - Toast notifications
+   - Accessibility improvements
+   ========================================================= */
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
-    loadSessions();
-    renderAll();
-    setupEventListeners();
-});
+(() => {
+  "use strict";
 
-// Setup event listeners
-function setupEventListeners() {
-    document.getElementById('sessionForm').addEventListener('submit', handleAddSession);
-    document.getElementById('editForm').addEventListener('submit', handleEditSession);
-    document.getElementById('exportBtn').addEventListener('click', exportData);
-    document.getElementById('importFile').addEventListener('change', importData);
-    document.getElementById('clearBtn').addEventListener('click', clearAllData);
-}
+  // ---------------------------
+  // Storage Keys
+  // ---------------------------
+  const STORAGE_KEY = "casino:sessions:v1";
+  const THEME_KEY = "casino:theme:v1";
+  const MODE_KEY = "casino:mode:v1";
+  const CHART_VIEW_KEY = "casino:chart-view:v1";
 
-// Load sessions from localStorage
-function loadSessions() {
-    const stored = localStorage.getItem('casinoSessions');
-    if (stored) {
-        try {
-            sessions = JSON.parse(stored);
-        } catch (e) {
-            console.error('Error loading sessions:', e);
-            sessions = [];
+  // ---------------------------
+  // DOM
+  // ---------------------------
+  const el = {
+    form: document.getElementById("sessionForm"),
+    date: document.getElementById("date"),
+    buyIn: document.getElementById("buyIn"),
+    cashOut: document.getElementById("cashOut"),
+    resetBtn: document.getElementById("resetBtn"),
+    formError: document.getElementById("formError"),
+
+    totalBuyIn: document.getElementById("totalBuyIn"),
+    totalCashOut: document.getElementById("totalCashOut"),
+    netPL: document.getElementById("netPL"),
+    winRate: document.getElementById("winRate"),
+    sessionCount: document.getElementById("sessionCount"),
+    avgPL: document.getElementById("avgPL"),
+
+    biggestWin: document.getElementById("biggestWin"),
+    biggestLoss: document.getElementById("biggestLoss"),
+    currentStreak: document.getElementById("currentStreak"),
+    roi: document.getElementById("roi"),
+
+    tableBody: document.getElementById("tableBody"),
+    emptyState: document.getElementById("emptyState"),
+
+    exportBtn: document.getElementById("exportBtn"),
+    importFile: document.getElementById("importFile"),
+    clearBtn: document.getElementById("clearBtn"),
+
+    themeSelect: document.getElementById("themeSelect"),
+    modeToggle: document.getElementById("modeToggle"),
+
+    cumulativeBtn: document.getElementById("cumulativeBtn"),
+    dailyBtn: document.getElementById("dailyBtn"),
+
+    editModal: document.getElementById("editModal"),
+    editForm: document.getElementById("editForm"),
+    editId: document.getElementById("editId"),
+    editDate: document.getElementById("editDate"),
+    editBuyIn: document.getElementById("editBuyIn"),
+    editCashOut: document.getElementById("editCashOut"),
+    saveEditBtn: document.getElementById("saveEditBtn"),
+    editError: document.getElementById("editError"),
+
+    chartCanvas: document.getElementById("plChart"),
+    toast: document.getElementById("toast"),
+  };
+
+  // ---------------------------
+  // State
+  // ---------------------------
+  /** @type {{id:string, date:string, buyIn:number, cashOut:number}[]} */
+  let sessions = loadSessions();
+  let chart = null;
+  let chartView = loadChartView(); // "cumulative" or "daily"
+
+  // ---------------------------
+  // Utilities
+  // ---------------------------
+  const uid = () =>
+    (crypto?.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+
+  const money = (n) =>
+    n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+
+  const asNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const sortByDateAsc = (a, b) => a.date.localeCompare(b.date);
+
+  const computePL = (s) => s.cashOut - s.buyIn;
+
+  function setError(targetEl, msg) {
+    targetEl.textContent = msg || "";
+  }
+
+  function confirmDanger(message) {
+    return window.confirm(message);
+  }
+
+  // ---------------------------
+  // Toast Notifications
+  // ---------------------------
+  function showToast(message, type = "success") {
+    el.toast.textContent = message;
+    el.toast.className = `toast ${type} show`;
+    
+    setTimeout(() => {
+      el.toast.classList.remove("show");
+    }, 3000);
+  }
+
+  // ---------------------------
+  // Theme & Mode
+  // ---------------------------
+  function loadTheme() {
+    return localStorage.getItem(THEME_KEY) || "midnight";
+  }
+
+  function loadMode() {
+    const saved = localStorage.getItem(MODE_KEY);
+    if (saved) return saved;
+    
+    // Detect system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return "light";
+    }
+    return "dark";
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+    if (el.themeSelect) el.themeSelect.value = theme;
+    renderChart();
+  }
+
+  function applyMode(mode) {
+    document.documentElement.setAttribute("data-mode", mode);
+    localStorage.setItem(MODE_KEY, mode);
+    updateModeIcon(mode);
+    renderChart();
+  }
+
+  function updateModeIcon(mode) {
+    const icon = el.modeToggle.querySelector('.mode-icon');
+    icon.textContent = mode === "dark" ? "☀" : "🌙";
+    el.modeToggle.setAttribute('aria-label', 
+      mode === "dark" ? "Switch to light mode" : "Switch to dark mode"
+    );
+  }
+
+  function toggleMode() {
+    const current = document.documentElement.getAttribute("data-mode");
+    const newMode = current === "dark" ? "light" : "dark";
+    applyMode(newMode);
+  }
+
+  // ---------------------------
+  // Chart View
+  // ---------------------------
+  function loadChartView() {
+    return localStorage.getItem(CHART_VIEW_KEY) || "cumulative";
+  }
+
+  function saveChartView(view) {
+    chartView = view;
+    localStorage.setItem(CHART_VIEW_KEY, view);
+  }
+
+  function updateChartViewButtons() {
+    el.cumulativeBtn.classList.toggle("active", chartView === "cumulative");
+    el.dailyBtn.classList.toggle("active", chartView === "daily");
+    
+    el.cumulativeBtn.setAttribute("aria-pressed", chartView === "cumulative");
+    el.dailyBtn.setAttribute("aria-pressed", chartView === "daily");
+  }
+
+  // ---------------------------
+  // Persistence
+  // ---------------------------
+  function loadSessions() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(x => x && typeof x.date === "string")
+        .map(x => ({
+          id: typeof x.id === "string" ? x.id : uid(),
+          date: x.date,
+          buyIn: Number(x.buyIn) || 0,
+          cashOut: Number(x.cashOut) || 0,
+        }))
+        .sort(sortByDateAsc);
+    } catch (err) {
+      console.error("Error loading sessions:", err);
+      showToast("Error loading saved data", "error");
+      return [];
+    }
+  }
+
+  function saveSessions() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    } catch (err) {
+      console.error("Error saving sessions:", err);
+      if (err.name === 'QuotaExceededError') {
+        showToast("Storage quota exceeded. Consider exporting and clearing old data.", "error");
+      } else {
+        showToast("Error saving data", "error");
+      }
+    }
+  }
+
+  // ---------------------------
+  // Validation
+  // ---------------------------
+  function validateInputs(date, buyIn, cashOut) {
+    if (!date) return "Date is required.";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Date must be YYYY-MM-DD.";
+    if (!Number.isFinite(buyIn) || buyIn < 0) return "Buy-in must be a number ≥ 0.";
+    if (!Number.isFinite(cashOut) || cashOut < 0) return "Cash-out must be a number ≥ 0.";
+    return "";
+  }
+
+  // ---------------------------
+  // Derived Metrics
+  // ---------------------------
+  function summarize(list) {
+    const totalBuyIn = list.reduce((sum, s) => sum + s.buyIn, 0);
+    const totalCashOut = list.reduce((sum, s) => sum + s.cashOut, 0);
+    const net = totalCashOut - totalBuyIn;
+
+    const wins = list.filter(s => computePL(s) > 0).length;
+    const count = list.length;
+    const winRate = count ? (wins / count) * 100 : 0;
+
+    const avg = count ? (list.reduce((sum, s) => sum + computePL(s), 0) / count) : 0;
+
+    // Biggest win/loss
+    let biggestWin = 0;
+    let biggestLoss = 0;
+    list.forEach(s => {
+      const pl = computePL(s);
+      if (pl > biggestWin) biggestWin = pl;
+      if (pl < biggestLoss) biggestLoss = pl;
+    });
+
+    // Current streak
+    let currentStreak = 0;
+    if (count > 0) {
+      const sorted = [...list].sort(sortByDateAsc);
+      const lastPL = computePL(sorted[sorted.length - 1]);
+      const isWinStreak = lastPL > 0;
+      
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const pl = computePL(sorted[i]);
+        if ((isWinStreak && pl > 0) || (!isWinStreak && pl <= 0)) {
+          currentStreak++;
+        } else {
+          break;
         }
+      }
+      
+      if (!isWinStreak) currentStreak = -currentStreak;
     }
-}
 
-// Save sessions to localStorage
-function saveSessions() {
-    localStorage.setItem('casinoSessions', JSON.stringify(sessions));
-}
+    // ROI
+    const roi = totalBuyIn > 0 ? ((net / totalBuyIn) * 100) : 0;
 
-// Handle form submission
-function handleAddSession(e) {
-    e.preventDefault();
+    return { totalBuyIn, totalCashOut, net, winRate, count, avg, biggestWin, biggestLoss, currentStreak, roi };
+  }
+
+  function buildChartSeries(list) {
+    let cum = 0;
+    const labels = [];
+    const cumulative = [];
+    const dailyPL = [];
+
+    list.forEach(s => {
+      const pl = computePL(s);
+      cum += pl;
+      labels.push(s.date);
+      dailyPL.push(pl);
+      cumulative.push(cum);
+    });
+
+    return { labels, cumulative, dailyPL };
+  }
+
+  // ---------------------------
+  // Render: Summary & Stats
+  // ---------------------------
+  function renderSummary() {
+    const { totalBuyIn, totalCashOut, net, winRate, count, avg, biggestWin, biggestLoss, currentStreak, roi } = summarize(sessions);
+
+    el.totalBuyIn.textContent = money(totalBuyIn);
+    el.totalCashOut.textContent = money(totalCashOut);
+
+    el.netPL.textContent = money(net);
+    el.netPL.classList.remove("good", "bad");
+    if (net > 0) el.netPL.classList.add("good");
+    if (net < 0) el.netPL.classList.add("bad");
+
+    el.winRate.textContent = `${winRate.toFixed(0)}%`;
+    el.sessionCount.textContent = String(count);
+
+    el.avgPL.textContent = money(avg);
+    el.avgPL.classList.remove("good", "bad");
+    if (avg > 0) el.avgPL.classList.add("good");
+    if (avg < 0) el.avgPL.classList.add("bad");
+
+    // Statistics
+    el.biggestWin.textContent = money(biggestWin);
+    el.biggestLoss.textContent = money(biggestLoss);
     
-    const date = document.getElementById('sessionDate').value;
-    const buyIn = parseFloat(document.getElementById('buyIn').value);
-    const cashOut = parseFloat(document.getElementById('cashOut').value);
-    
-    // Validation
-    if (!date) {
-        alert('Please enter a date');
-        return;
+    if (currentStreak === 0) {
+      el.currentStreak.textContent = "-";
+      el.currentStreak.classList.remove("good", "bad");
+    } else if (currentStreak > 0) {
+      el.currentStreak.textContent = `${currentStreak}W`;
+      el.currentStreak.classList.remove("bad");
+      el.currentStreak.classList.add("good");
+    } else {
+      el.currentStreak.textContent = `${Math.abs(currentStreak)}L`;
+      el.currentStreak.classList.remove("good");
+      el.currentStreak.classList.add("bad");
     }
-    
-    if (isNaN(buyIn) || buyIn < 0) {
-        alert('Please enter a valid buy-in amount (0 or greater)');
-        return;
+
+    el.roi.textContent = `${roi.toFixed(1)}%`;
+    el.roi.classList.remove("good", "bad");
+    if (roi > 0) el.roi.classList.add("good");
+    if (roi < 0) el.roi.classList.add("bad");
+  }
+
+  // ---------------------------
+  // Render: Table
+  // ---------------------------
+  function renderTable() {
+    el.tableBody.innerHTML = "";
+
+    const showEmpty = sessions.length === 0;
+    el.emptyState.style.display = showEmpty ? "block" : "none";
+
+    for (const s of sessions) {
+      const pl = computePL(s);
+
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td><span class="mono">${escapeHtml(s.date)}</span></td>
+        <td class="num">${escapeHtml(money(s.buyIn))}</td>
+        <td class="num">${escapeHtml(money(s.cashOut))}</td>
+        <td class="num">
+          <span class="${pl > 0 ? "good" : pl < 0 ? "bad" : ""}">${escapeHtml(money(pl))}</span>
+        </td>
+        <td class="actions">
+          <div class="row-actions">
+            <button class="icon" data-action="edit" data-id="${s.id}" type="button" aria-label="Edit session from ${s.date}">Edit</button>
+            <button class="icon danger" data-action="delete" data-id="${s.id}" type="button" aria-label="Delete session from ${s.date}">Delete</button>
+          </div>
+        </td>
+      `;
+
+      el.tableBody.appendChild(tr);
     }
-    
-    if (isNaN(cashOut) || cashOut < 0) {
-        alert('Please enter a valid cash-out amount (0 or greater)');
-        return;
-    }
-    
-    // Create new session
-    const session = {
-        id: Date.now(),
-        date: date,
-        buyIn: buyIn,
-        cashOut: cashOut,
-        profitLoss: cashOut - buyIn
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  // ---------------------------
+  // Render: Chart
+  // ---------------------------
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function buildChartConfig(series) {
+    const { labels, cumulative, dailyPL } = series;
+
+    const text = cssVar("--text");
+    const muted = cssVar("--muted");
+    const grid = cssVar("--grid");
+    const good = cssVar("--good");
+    const bad = cssVar("--bad");
+    const panelBg = "rgba(0,0,0,.10)";
+
+    const mode = document.documentElement.getAttribute("data-mode");
+    const panelBgLight = "rgba(0,0,0,.04)";
+
+    const pointColors = dailyPL.map(pl => (pl > 0 ? good : pl < 0 ? bad : muted));
+
+    const dataToShow = chartView === "cumulative" ? cumulative : dailyPL;
+    const chartType = chartView === "cumulative" ? "line" : "bar";
+
+    const config = {
+      type: chartType,
+      data: {
+        labels,
+        datasets: [{
+          label: chartView === "cumulative" ? "Cumulative Profit/Loss" : "Daily Profit/Loss",
+          data: dataToShow,
+          tension: chartView === "cumulative" ? 0.35 : 0,
+          borderWidth: 2,
+          pointRadius: chartView === "cumulative" ? 3.5 : 0,
+          pointHoverRadius: chartView === "cumulative" ? 6 : 0,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointColors,
+          fill: chartView === "cumulative" ? true : false,
+          backgroundColor: chartView === "cumulative" 
+            ? (mode === "light" ? panelBgLight : panelBg)
+            : pointColors,
+          borderColor: chartView === "cumulative" ? good : undefined,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              title: (items) => `Date: ${items?.[0]?.label ?? ""}`,
+              label: (item) => {
+                const idx = item.dataIndex;
+                const daily = dailyPL[idx] ?? 0;
+                const cum = cumulative[idx] ?? 0;
+                const sign = daily > 0 ? "Win" : daily < 0 ? "Loss" : "Even";
+                
+                if (chartView === "cumulative") {
+                  return [
+                    `Daily (${sign}): ${money(daily)}`,
+                    `Cumulative: ${money(cum)}`
+                  ];
+                } else {
+                  return `P/L (${sign}): ${money(daily)}`;
+                }
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: grid },
+            ticks: { color: muted, maxRotation: 0, autoSkip: true },
+          },
+          y: {
+            grid: { color: grid },
+            ticks: {
+              color: muted,
+              callback: (v) => money(Number(v)),
+            },
+          }
+        }
+      }
     };
-    
-    sessions.push(session);
-    saveSessions();
-    renderAll();
-    
-    // Reset form
-    document.getElementById('sessionForm').reset();
-}
 
-// Delete a session
-function deleteSession(id) {
-    if (confirm('Are you sure you want to delete this session?')) {
-        sessions = sessions.filter(s => s.id !== id);
-        saveSessions();
-        renderAll();
+    // Segment coloring only for cumulative line chart
+    if (chartView === "cumulative") {
+      config.data.datasets[0].segment = {
+        borderColor: (ctx) => {
+          const y0 = ctx.p0.parsed.y;
+          const y1 = ctx.p1.parsed.y;
+          if (y1 > y0) return good;
+          if (y1 < y0) return bad;
+          return muted;
+        }
+      };
     }
-}
 
-// Open edit modal
-function openEditModal(id) {
-    const session = sessions.find(s => s.id === id);
-    if (!session) return;
-    
-    document.getElementById('editSessionId').value = session.id;
-    document.getElementById('editDate').value = session.date;
-    document.getElementById('editBuyIn').value = session.buyIn;
-    document.getElementById('editCashOut').value = session.cashOut;
-    
-    document.getElementById('editModal').classList.add('active');
-}
+    return config;
+  }
 
-// Close edit modal
-function closeEditModal() {
-    document.getElementById('editModal').classList.remove('active');
-    document.getElementById('editForm').reset();
-}
+  function renderChart() {
+    const series = buildChartSeries(sessions);
 
-// Handle edit form submission
-function handleEditSession(e) {
-    e.preventDefault();
-    
-    const id = parseInt(document.getElementById('editSessionId').value);
-    const date = document.getElementById('editDate').value;
-    const buyIn = parseFloat(document.getElementById('editBuyIn').value);
-    const cashOut = parseFloat(document.getElementById('editCashOut').value);
-    
-    // Validation
-    if (!date) {
-        alert('Please enter a date');
-        return;
+    if (chart) {
+      chart.destroy();
+      chart = null;
     }
-    
-    if (isNaN(buyIn) || buyIn < 0) {
-        alert('Please enter a valid buy-in amount (0 or greater)');
-        return;
-    }
-    
-    if (isNaN(cashOut) || cashOut < 0) {
-        alert('Please enter a valid cash-out amount (0 or greater)');
-        return;
-    }
-    
-    // Update session
-    const sessionIndex = sessions.findIndex(s => s.id === id);
-    if (sessionIndex !== -1) {
-        sessions[sessionIndex] = {
-            id: id,
-            date: date,
-            buyIn: buyIn,
-            cashOut: cashOut,
-            profitLoss: cashOut - buyIn
-        };
-        
-        saveSessions();
-        renderAll();
-        closeEditModal();
-    }
-}
 
-// Render everything
-function renderAll() {
-    renderSummaryCards();
+    const ctx = el.chartCanvas.getContext("2d");
+    chart = new Chart(ctx, buildChartConfig(series));
+  }
+
+  // ---------------------------
+  // Render: All
+  // ---------------------------
+  function renderAll() {
+    sessions.sort(sortByDateAsc);
+    renderSummary();
     renderTable();
     renderChart();
-}
+    updateChartViewButtons();
+  }
 
-// Render summary cards
-function renderSummaryCards() {
-    const totalBuyIn = sessions.reduce((sum, s) => sum + s.buyIn, 0);
-    const totalCashOut = sessions.reduce((sum, s) => sum + s.cashOut, 0);
-    const netProfitLoss = totalCashOut - totalBuyIn;
-    const profitableSessions = sessions.filter(s => s.profitLoss > 0).length;
-    const winRate = sessions.length > 0 ? (profitableSessions / sessions.length) * 100 : 0;
-    
-    document.getElementById('totalBuyIn').textContent = formatCurrency(totalBuyIn);
-    document.getElementById('totalCashOut').textContent = formatCurrency(totalCashOut);
-    
-    const netElement = document.getElementById('netProfitLoss');
-    netElement.textContent = formatCurrency(netProfitLoss);
-    netElement.className = 'card-value';
-    if (netProfitLoss > 0) {
-        netElement.classList.add('positive');
-    } else if (netProfitLoss < 0) {
-        netElement.classList.add('negative');
-    }
-    
-    const winRateElement = document.getElementById('winRate');
-    winRateElement.textContent = winRate.toFixed(1) + '%';
-    winRateElement.className = 'card-value';
-    if (winRate >= 50) {
-        winRateElement.classList.add('positive');
-    } else if (winRate > 0) {
-        winRateElement.classList.add('negative');
-    }
-}
+  // ---------------------------
+  // CRUD
+  // ---------------------------
+  function addSession(date, buyIn, cashOut) {
+    sessions.push({ id: uid(), date, buyIn, cashOut });
+    sessions.sort(sortByDateAsc);
+    saveSessions();
+    renderAll();
+    showToast("Session added successfully");
+  }
 
-// Render table
-function renderTable() {
-    const tbody = document.getElementById('tableBody');
-    
+  function deleteSession(id) {
+    sessions = sessions.filter(s => s.id !== id);
+    saveSessions();
+    renderAll();
+    showToast("Session deleted");
+  }
+
+  function updateSession(id, patch) {
+    const idx = sessions.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    sessions[idx] = { ...sessions[idx], ...patch };
+    sessions.sort(sortByDateAsc);
+    saveSessions();
+    renderAll();
+    showToast("Session updated successfully");
+  }
+
+  // ---------------------------
+  // Export / Import
+  // ---------------------------
+  function exportJson() {
     if (sessions.length === 0) {
-        tbody.innerHTML = '<tr class="empty-state"><td colspan="5">No sessions recorded yet. Add your first session above!</td></tr>';
-        return;
+      showToast("No data to export", "error");
+      return;
     }
-    
-    // Sort by date (ascending)
-    const sortedSessions = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    tbody.innerHTML = sortedSessions.map(session => `
-        <tr>
-            <td>${formatDate(session.date)}</td>
-            <td>${formatCurrency(session.buyIn)}</td>
-            <td>${formatCurrency(session.cashOut)}</td>
-            <td class="${session.profitLoss >= 0 ? 'profit' : 'loss'}">
-                ${formatCurrency(session.profitLoss)}
-            </td>
-            <td>
-                <div class="action-buttons">
-                    <button class="btn btn-edit" onclick="openEditModal(${session.id})">Edit</button>
-                    <button class="btn btn-delete" onclick="deleteSession(${session.id})">Delete</button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-}
 
-// Render chart
-function renderChart() {
-    const canvas = document.getElementById('performanceChart');
-    const ctx = canvas.getContext('2d');
-    
-    // Destroy existing chart
-    if (chart) {
-        chart.destroy();
-    }
-    
-    if (sessions.length === 0) {
-        return;
-    }
-    
-    // Sort by date and calculate cumulative profit
-    const sortedSessions = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    let cumulative = 0;
-    const chartData = sortedSessions.map(session => {
-        cumulative += session.profitLoss;
-        return {
-            date: session.date,
-            cumulative: cumulative,
-            profitLoss: session.profitLoss
-        };
-    });
-    
-    const labels = chartData.map(d => formatDate(d.date));
-    const data = chartData.map(d => d.cumulative);
-    const pointColors = chartData.map(d => d.profitLoss >= 0 ? '#00d4aa' : '#ff4757');
-    
-    chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Cumulative Profit/Loss',
-                data: data,
-                borderColor: '#4a9eff',
-                backgroundColor: 'rgba(74, 158, 255, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                fill: true,
-                pointBackgroundColor: pointColors,
-                pointBorderColor: pointColors,
-                pointRadius: 6,
-                pointHoverRadius: 8
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: {
-                    display: true,
-                    labels: {
-                        color: '#e1e4f0',
-                        font: {
-                            size: 14,
-                            weight: '600'
-                        }
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 31, 58, 0.95)',
-                    titleColor: '#e1e4f0',
-                    bodyColor: '#e1e4f0',
-                    borderColor: '#2a2f4a',
-                    borderWidth: 1,
-                    padding: 12,
-                    displayColors: false,
-                    callbacks: {
-                        label: function(context) {
-                            return 'Cumulative: ' + formatCurrency(context.parsed.y);
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(42, 47, 74, 0.5)'
-                    },
-                    ticks: {
-                        color: '#8b92b0',
-                        callback: function(value) {
-                            return '$' + value.toLocaleString();
-                        }
-                    }
-                },
-                x: {
-                    grid: {
-                        color: 'rgba(42, 47, 74, 0.5)'
-                    },
-                    ticks: {
-                        color: '#8b92b0',
-                        maxRotation: 45,
-                        minRotation: 45
-                    }
-                }
-            }
-        }
-    });
-}
+    const payload = JSON.stringify(sessions, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
 
-// Export data to JSON
-function exportData() {
-    if (sessions.length === 0) {
-        alert('No data to export');
-        return;
-    }
-    
-    const dataStr = JSON.stringify(sessions, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `casino-sessions-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `casino-sessions-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
     URL.revokeObjectURL(url);
-}
+    showToast("Data exported successfully");
+  }
 
-// Import data from JSON
-function importData(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        try {
-            const imported = JSON.parse(event.target.result);
-            
-            if (!Array.isArray(imported)) {
-                alert('Invalid file format');
-                return;
-            }
-            
-            // Validate data structure
-            const isValid = imported.every(s => 
-                s.date && 
-                typeof s.buyIn === 'number' && 
-                typeof s.cashOut === 'number'
-            );
-            
-            if (!isValid) {
-                alert('Invalid data structure in file');
-                return;
-            }
-            
-            if (confirm(`Import ${imported.length} sessions? This will replace your current data.`)) {
-                sessions = imported;
-                saveSessions();
-                renderAll();
-                alert('Data imported successfully!');
-            }
-        } catch (error) {
-            alert('Error reading file: ' + error.message);
-        }
-    };
-    reader.readAsText(file);
-    
-    // Reset file input
-    e.target.value = '';
-}
+  async function importJsonFile(file) {
+    const text = await file.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("That file is not valid JSON.");
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error("Import file must be an array of sessions.");
+    }
 
-// Clear all data
-function clearAllData() {
-    if (sessions.length === 0) {
-        alert('No data to clear');
+    const normalized = parsed.map(x => ({
+      id: typeof x.id === "string" ? x.id : uid(),
+      date: String(x.date || ""),
+      buyIn: Number(x.buyIn),
+      cashOut: Number(x.cashOut),
+    }));
+
+    for (const s of normalized) {
+      const err = validateInputs(s.date, s.buyIn, s.cashOut);
+      if (err) throw new Error(`Import error for date "${s.date}": ${err}`);
+    }
+
+    sessions = normalized.sort(sortByDateAsc);
+    saveSessions();
+    renderAll();
+    showToast(`Successfully imported ${sessions.length} sessions`);
+  }
+
+  // ---------------------------
+  // Edit Modal
+  // ---------------------------
+  function openEditModal(session) {
+    setError(el.editError, "");
+
+    el.editId.value = session.id;
+    el.editDate.value = session.date;
+    el.editBuyIn.value = String(session.buyIn);
+    el.editCashOut.value = String(session.cashOut);
+
+    el.editModal.showModal();
+    
+    // Focus first input for accessibility
+    setTimeout(() => el.editDate.focus(), 100);
+  }
+
+  function closeEditModal() {
+    el.editModal.close();
+  }
+
+  function handleSaveEdit() {
+    const id = el.editId.value;
+
+    const date = el.editDate.value;
+    const buyIn = asNumber(el.editBuyIn.value);
+    const cashOut = asNumber(el.editCashOut.value);
+
+    const err = validateInputs(date, buyIn, cashOut);
+    if (err) {
+      setError(el.editError, err);
+      return;
+    }
+
+    updateSession(id, { date, buyIn, cashOut });
+    closeEditModal();
+  }
+
+  // ---------------------------
+  // Events
+  // ---------------------------
+  function wireEvents() {
+    // Theme & Mode
+    applyTheme(loadTheme());
+    applyMode(loadMode());
+    
+    el.themeSelect.addEventListener("change", (e) => {
+      applyTheme(e.target.value);
+    });
+
+    el.modeToggle.addEventListener("click", toggleMode);
+
+    // Chart view toggle
+    el.cumulativeBtn.addEventListener("click", () => {
+      saveChartView("cumulative");
+      renderChart();
+      updateChartViewButtons();
+    });
+
+    el.dailyBtn.addEventListener("click", () => {
+      saveChartView("daily");
+      renderChart();
+      updateChartViewButtons();
+    });
+
+    // Add form
+    el.form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      setError(el.formError, "");
+
+      const date = el.date.value;
+      const buyIn = asNumber(el.buyIn.value);
+      const cashOut = asNumber(el.cashOut.value);
+
+      const err = validateInputs(date, buyIn, cashOut);
+      if (err) {
+        setError(el.formError, err);
         return;
-    }
-    
-    if (confirm('Are you sure you want to delete ALL sessions? This cannot be undone!')) {
-        sessions = [];
-        saveSessions();
-        renderAll();
-        alert('All data cleared');
-    }
-}
+      }
 
-// Format currency
-function formatCurrency(amount) {
-    const formatted = Math.abs(amount).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
+      addSession(date, buyIn, cashOut);
+      el.form.reset();
+      el.date.focus();
     });
-    
-    if (amount < 0) {
-        return '-$' + formatted;
-    }
-    return '$' + formatted;
-}
 
-// Format date for display
-function formatDate(dateString) {
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
+    el.resetBtn.addEventListener("click", () => {
+      setError(el.formError, "");
+      el.form.reset();
+      el.date.focus();
     });
-}
+
+    // Table actions (event delegation)
+    el.tableBody.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+
+      const session = sessions.find(s => s.id === id);
+      if (!session) return;
+
+      if (action === "edit") {
+        openEditModal(session);
+        return;
+      }
+
+      if (action === "delete") {
+        const pl = computePL(session);
+        const ok = confirmDanger(
+          `Delete session on ${session.date}?\n\nBuy-in: ${money(session.buyIn)}\nCash-out: ${money(session.cashOut)}\nP/L: ${money(pl)}`
+        );
+        if (ok) deleteSession(id);
+      }
+    });
+
+    // Export
+    el.exportBtn.addEventListener("click", exportJson);
+
+    // Import
+    el.importFile.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        await importJsonFile(file);
+      } catch (err) {
+        showToast(err?.message || "Import failed", "error");
+      } finally {
+        e.target.value = "";
+      }
+    });
+
+    // Clear all
+    el.clearBtn.addEventListener("click", () => {
+      if (!sessions.length) {
+        showToast("No data to clear", "error");
+        return;
+      }
+
+      const ok = confirmDanger("Clear ALL sessions? This cannot be undone.");
+      if (!ok) return;
+
+      sessions = [];
+      saveSessions();
+      renderAll();
+      showToast("All data cleared");
+    });
+
+    // Edit modal save
+    el.saveEditBtn.addEventListener("click", handleSaveEdit);
+
+    // Edit form submit (for keyboard)
+    el.editForm.addEventListener("submit", (e) => {
+      setError(el.editError, "");
+    });
+
+    // Modal keyboard handling
+    el.editModal.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeEditModal();
+      }
+    });
+
+    // System theme change detection
+    if (window.matchMedia) {
+      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      darkModeQuery.addEventListener('change', (e) => {
+        // Only auto-switch if user hasn't manually set a preference
+        const hasManualPreference = localStorage.getItem(MODE_KEY);
+        if (!hasManualPreference) {
+          applyMode(e.matches ? "dark" : "light");
+        }
+      });
+    }
+  }
+
+  // ---------------------------
+  // Init
+  // ---------------------------
+  function init() {
+    wireEvents();
+    renderAll();
+  }
+
+  init();
+})();
