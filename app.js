@@ -150,7 +150,7 @@
 
   function updateModeIcon(mode) {
     const icon = el.modeToggle.querySelector('.mode-icon');
-    icon.textContent = mode === "dark" ? "☀" : "🌙";
+    icon.textContent = mode === "dark" ? "☀️" : "🌙";
     el.modeToggle.setAttribute('aria-label', 
       mode === "dark" ? "Switch to light mode" : "Switch to dark mode"
     );

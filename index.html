@@ -17,36 +17,35 @@
       <div class="logo" aria-hidden="true">CS</div>
       <div class="brand-text">
         <div class="title">Casino Sessions</div>
-        <div class="subtitle">Trading-style P/L tracker</div>
       </div>
     </div>
 
     <div class="topbar-actions">
-      <div class="theme-wrap">
-        <span class="pill-label">Theme</span>
-        <select id="themeSelect" class="select" aria-label="Select color theme">
-          <option value="midnight">Midnight</option>
-          <option value="graphite">Graphite</option>
-          <option value="neon">Neon</option>
-          <option value="sand">Sand</option>
-        </select>
-      </div>
+      <button id="modeToggle" class="icon-toggle" type="button" aria-label="Toggle dark/light mode" title="Toggle theme mode">
+        <span class="mode-icon">◐</span>
+      </button>
 
-      <div class="theme-wrap">
-        <span class="pill-label">Mode</span>
-        <button id="modeToggle" class="btn btn-ghost mode-btn" type="button" aria-label="Toggle dark/light mode">
-          <span class="mode-icon">◐</span>
-        </button>
-      </div>
+      <select id="themeSelect" class="theme-select" aria-label="Select color theme">
+        <option value="midnight">Midnight</option>
+        <option value="graphite">Graphite</option>
+        <option value="neon">Neon</option>
+        <option value="sand">Sand</option>
+      </select>
 
-      <button id="exportBtn" class="btn btn-ghost" type="button" aria-label="Export data as JSON">Export JSON</button>
+      <div class="divider"></div>
 
-      <label class="btn btn-ghost file-btn" for="importFile">
-        Import JSON
+      <button id="exportBtn" class="icon-btn-text" type="button" aria-label="Export data as JSON" title="Export data">
+        <span class="icon-text">↓</span>
+      </button>
+
+      <label class="icon-btn-text" for="importFile" title="Import data">
+        <span class="icon-text">↑</span>
         <input id="importFile" type="file" accept="application/json" hidden aria-label="Import JSON file" />
       </label>
 
-      <button id="clearBtn" class="btn btn-danger" type="button" aria-label="Clear all sessions">Clear All</button>
+      <button id="clearBtn" class="icon-btn-text danger" type="button" aria-label="Clear all sessions" title="Clear all data">
+        <span class="icon-text">✕</span>
+      </button>
     </div>
   </header>
 
