@@ -66,6 +66,12 @@
     saveEditBtn: document.getElementById("saveEditBtn"),
     editError: document.getElementById("editError"),
 
+    clearModal: document.getElementById("clearModal"),
+    closeClearModal: document.getElementById("closeClearModal"),
+    cancelClear: document.getElementById("cancelClear"),
+    confirmClear: document.getElementById("confirmClear"),
+    clearSessionCount: document.getElementById("clearSessionCount"),
+
     chartCanvas: document.getElementById("plChart"),
     toast: document.getElementById("toast"),
   };
@@ -734,13 +740,36 @@
         return;
       }
 
-      const ok = confirmDanger("Clear ALL sessions? This cannot be undone.");
-      if (!ok) return;
+      // Update count in modal
+      const count = sessions.length;
+      el.clearSessionCount.textContent = `${count} session${count !== 1 ? 's' : ''}`;
+      
+      // Show confirmation modal
+      el.clearModal.showModal();
+    });
 
+    // Clear modal actions
+    el.closeClearModal.addEventListener("click", () => {
+      el.clearModal.close();
+    });
+
+    el.cancelClear.addEventListener("click", () => {
+      el.clearModal.close();
+    });
+
+    el.confirmClear.addEventListener("click", () => {
       sessions = [];
       saveSessions();
       renderAll();
+      el.clearModal.close();
       showToast("All data cleared");
+    });
+
+    // Close modal on Escape
+    el.clearModal.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        el.clearModal.close();
+      }
     });
 
     // Edit modal save

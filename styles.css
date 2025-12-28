@@ -328,6 +328,12 @@ html[data-mode="light"] .divider{
   font-weight: 700;
 }
 
+.icon-svg{
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
 html[data-mode="light"] .icon-btn-text{
   border: 1px solid rgba(0,0,0,.12);
   background: rgba(0,0,0,.04);
@@ -918,6 +924,32 @@ html[data-mode="light"] .icon-btn:hover{ background: rgba(0,0,0,.10); }
   justify-content:flex-end;
   gap:10px;
   padding: 14px 16px 16px;
+}
+
+/* Confirmation modal */
+.confirm-modal{
+  max-width: 480px;
+}
+
+.confirm-content{
+  padding: 20px 16px;
+  line-height: 1.6;
+}
+
+.confirm-content p{
+  margin: 0 0 12px 0;
+  color: var(--text);
+}
+
+.confirm-content strong{
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.warning-text{
+  color: var(--warn);
+  font-weight: 600;
+  font-size: .9rem;
 }
 
 /* ---------- FOOTER ---------- */

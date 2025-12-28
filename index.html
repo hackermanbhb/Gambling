@@ -35,16 +35,27 @@
       <div class="divider"></div>
 
       <button id="exportBtn" class="icon-btn-text" type="button" aria-label="Export data as JSON" title="Export data">
-        <span class="icon-text">↓</span>
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
       </button>
 
       <label class="icon-btn-text" for="importFile" title="Import data">
-        <span class="icon-text">↑</span>
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
         <input id="importFile" type="file" accept="application/json" hidden aria-label="Import JSON file" />
       </label>
 
       <button id="clearBtn" class="icon-btn-text danger" type="button" aria-label="Clear all sessions" title="Clear all data">
-        <span class="icon-text">✕</span>
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
       </button>
     </div>
   </header>
@@ -247,6 +258,29 @@
         <button id="saveEditBtn" class="btn btn-primary" value="default" type="button">Save Changes</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Clear Confirmation Modal -->
+  <dialog id="clearModal" class="modal" aria-labelledby="clearModalTitle">
+    <div class="modal-card confirm-modal">
+      <div class="modal-head">
+        <div>
+          <div id="clearModalTitle" class="modal-title">Clear All Data?</div>
+          <div class="modal-subtitle">This action cannot be undone.</div>
+        </div>
+        <button class="icon-btn" id="closeClearModal" aria-label="Close dialog" type="button">✕</button>
+      </div>
+
+      <div class="confirm-content">
+        <p>You are about to permanently delete <strong id="clearSessionCount">all</strong> sessions from your browser's storage.</p>
+        <p class="warning-text">⚠️ Make sure you've exported your data if you need to keep it.</p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancelClear" type="button">Cancel</button>
+        <button class="btn btn-danger" id="confirmClear" type="button">Yes, Clear All Data</button>
+      </div>
+    </div>
   </dialog>
 
   <footer class="footer">
